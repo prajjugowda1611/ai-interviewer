@@ -3,6 +3,8 @@ import PyPDF2
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
+from gtts import gTTS
+import io
 
 # 1. Page Setup
 st.set_page_config(page_title="AI Interviewer Pro", page_icon="🤖", layout="wide")
@@ -11,11 +13,19 @@ st.write("---")
 
 # 2. Give the Web App a "Memory"
 if "messages" not in st.session_state:
-    st.session_state.messages = [] # Remembers the chat UI
+    st.session_state.messages = []
 if "chat_session" not in st.session_state:
-    st.session_state.chat_session = None # Remembers the AI's brain
+    st.session_state.chat_session = None
 if "difficulty" not in st.session_state:
-    st.session_state.difficulty = "MEDIUM" # Remembers the difficulty
+    st.session_state.difficulty = "MEDIUM"
+
+# --- NEW VOICE FUNCTION ---
+def play_audio(text):
+    tts = gTTS(text=text, lang='en', tld='co.uk') # Using a strict UK accent for the recruiter
+    audio_bytes = io.BytesIO()
+    tts.write_to_fp(audio_bytes)
+    audio_bytes.seek(0)
+    st.audio(audio_bytes, format="audio/mp3", autoplay=True)
 
 # 3. The Sidebar
 with st.sidebar:
@@ -30,23 +40,20 @@ with st.sidebar:
     
     start_btn = st.button("Start Interview", use_container_width=True)
 
-# 4. Booting up the Engine (Only runs when you click Start)
+# 4. Booting up the Engine
 if start_btn:
     if uploaded_file is not None:
         with st.spinner("Scanning resume and preparing the interview..."):
             
-            # Read PDF
             reader = PyPDF2.PdfReader(uploaded_file)
             resume_text = ""
             for page in reader.pages:
                 resume_text += page.extract_text() + "\n"
             
-            # Setup AI
             load_dotenv()
             genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
             model = genai.GenerativeModel('gemini-2.5-flash')
             
-            # Start Chat and save it to memory
             st.session_state.chat_session = model.start_chat(history=[])
             st.session_state.difficulty = selected_diff
             
@@ -62,27 +69,28 @@ if start_btn:
             4. Keep the question under 3 sentences. Do not provide the answer.
             """
             
-            # Get first question and save to message history
             response = st.session_state.chat_session.send_message(fusion_prompt)
             st.session_state.messages = [{"role": "assistant", "content": response.text}]
             
     else:
         st.error("⚠️ Please upload a PDF resume first!")
 
-# 5. Display the Chat History on the Screen
+# 5. Display the Chat History
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-# 6. The Chat Input Box (Where you type your answers!)
+# --- PLAY AUDIO FOR THE LATEST AI MESSAGE ---
+if len(st.session_state.messages) > 0 and st.session_state.messages[-1]["role"] == "assistant":
+    play_audio(st.session_state.messages[-1]["content"])
+
+# 6. The Chat Input Box
 if prompt := st.chat_input("Type your answer here..."):
     
-    # Show user message on screen
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
         
-    # Generate AI Feedback
     with st.chat_message("assistant"):
         grading_prompt = f"""
         STRICT RULE: Only evaluate the exact words the user typed. Do not assume or invent concepts they did not explicitly write. If they type gibberish, give them a 0/10.
@@ -105,5 +113,5 @@ if prompt := st.chat_input("Type your answer here..."):
         response = st.session_state.chat_session.send_message(grading_prompt)
         st.markdown(response.text)
         
-        # Save AI response to memory
         st.session_state.messages.append({"role": "assistant", "content": response.text})
+        st.rerun() # Forces the page to refresh so the audio plays instantly
