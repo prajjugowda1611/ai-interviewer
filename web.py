@@ -2,7 +2,7 @@ import streamlit as st
 import PyPDF2
 import docx
 import os
-import google.genai as genai
+import google.generativeai as genai
 from dotenv import load_dotenv
 from gtts import gTTS
 import io

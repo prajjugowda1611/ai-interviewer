@@ -2,4 +2,5 @@ streamlit
 PyPDF2
 google-generativeai
 python-dotenv
-gTTs
+gTTS
+python-docx
